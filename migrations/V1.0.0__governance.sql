@@ -43,8 +43,8 @@ create or replace row access policy country_access as(row_country varchar) retur
 is_role_in_session('PULSE_PII_READER')
 or exists (
     select 1
-    from {{ database }}.governance.country_grants as allowed
+    from {{ database }}.governance.country_grants as grant_row
     where
-        allowed.country in (row_country, '*')
-        and is_role_in_session(allowed.role_name)
+        grant_row.country in (row_country, '*')
+        and is_role_in_session(grant_row.role_name)
 );
