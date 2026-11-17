@@ -1,0 +1,7 @@
+config-version: 1
+root-folder: migrations
+change-history-table: "{{ env_var('SNOWFLAKE_DATABASE') }}.SCHEMACHANGE.CHANGE_HISTORY"
+create-change-history-table: true
+query-tag: pulse-deploy
+vars:
+  database: "{{ env_var('SNOWFLAKE_DATABASE') }}"

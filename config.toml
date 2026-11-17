@@ -1,0 +1,31 @@
+[aws]
+region = "us-east-2"
+bucket_prefix = "pulse-events"
+events_prefix = "events/"
+
+[snowflake]
+database = "PULSE"
+raw_schema = "RAW"
+model_schema = "MODEL"
+governance_schema = "GOVERNANCE"
+raw_table = "EVENTS"
+pipe = "EVENTS_PIPE"
+load_warehouse = "PULSE_LOAD_WH"
+build_warehouse = "PULSE_BUILD_WH"
+query_warehouse = "PULSE_QUERY_WH"
+credit_price_usd = 3.0
+
+[producer]
+seed = 7
+start_date = "2026-09-01"
+days = 14
+orgs = 400
+events_per_file = 10000
+duplicate_rate = 0.005
+schema_v2_from_day = 7
+
+[ops]
+lookback_hours = 24
+lookback_days = 7
+idle_auto_suspend_seconds = 300
+queued_load_threshold = 0.5

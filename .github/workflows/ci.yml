@@ -1,0 +1,98 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e ".[dev]"
+      - run: ruff check .
+      - run: ruff format --check .
+      - run: sqlfluff lint migrations bootstrap.sql
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.17.2"
+      - run: terraform fmt -check -recursive terraform
+      - run: terraform -chdir=terraform/state init -backend=false
+      - run: terraform -chdir=terraform/state validate
+      - run: terraform -chdir=terraform/platform init -backend=false
+      - run: terraform -chdir=terraform/platform validate
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e ".[dev]"
+      - run: pytest -q
+
+  pr-environment:
+    if: github.event_name == 'pull_request' && vars.PULSE_LIVE == 'true'
+    needs: [lint, test]
+    runs-on: ubuntu-latest
+    concurrency:
+      group: pulse-pr-${{ github.event.pull_request.number }}
+      cancel-in-progress: false
+    env:
+      SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+      SNOWFLAKE_USER: PULSE_DEPLOYER
+      SNOWFLAKE_ROLE: PULSE_DEPLOYER
+      SNOWFLAKE_WAREHOUSE: PULSE_BUILD_WH
+      SNOWFLAKE_AUTHENTICATOR: snowflake_jwt
+      SNOWFLAKE_PRIVATE_KEY_FILE: /tmp/deployer.p8
+      SNOWFLAKE_DATABASE: PULSE_PR_${{ github.event.pull_request.number }}
+      PR: ${{ github.event.pull_request.number }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e ".[dev]"
+      - run: printf '%s\n' "$DEPLOYER_KEY" > "$SNOWFLAKE_PRIVATE_KEY_FILE"
+        env:
+          DEPLOYER_KEY: ${{ secrets.SNOWFLAKE_DEPLOYER_KEY }}
+      - run: pulse env create --pr "$PR"
+      - run: schemachange deploy
+      - run: pulse env check --pr "$PR"
+      - if: always()
+        run: pulse env drop --pr "$PR"
+
+  deploy:
+    if: github.event_name == 'push' && vars.PULSE_LIVE == 'true'
+    needs: [lint, test]
+    runs-on: ubuntu-latest
+    concurrency:
+      group: pulse-deploy
+      cancel-in-progress: false
+    env:
+      SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+      SNOWFLAKE_USER: PULSE_DEPLOYER
+      SNOWFLAKE_ROLE: PULSE_DEPLOYER
+      SNOWFLAKE_WAREHOUSE: PULSE_BUILD_WH
+      SNOWFLAKE_AUTHENTICATOR: snowflake_jwt
+      SNOWFLAKE_PRIVATE_KEY_FILE: /tmp/deployer.p8
+      SNOWFLAKE_DATABASE: PULSE
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e ".[dev]"
+      - run: printf '%s\n' "$DEPLOYER_KEY" > "$SNOWFLAKE_PRIVATE_KEY_FILE"
+        env:
+          DEPLOYER_KEY: ${{ secrets.SNOWFLAKE_DEPLOYER_KEY }}
+      - run: schemachange deploy
+      - run: pulse env check --name PULSE
