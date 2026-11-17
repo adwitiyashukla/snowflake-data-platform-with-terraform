@@ -174,7 +174,7 @@ def warehouses(conn, config, days):
             f"from table({sf.database}.information_schema.query_history_by_warehouse("
             f"warehouse_name => '{wh['name']}', "
             f"end_time_range_start => dateadd(hour, -{hours}, current_timestamp()), "
-            f"result_limit => 10000))",
+            f"result_limit => 10000)) where execution_status = 'SUCCESS'",
         )
         activity[wh["name"]] = stats[0] if stats else {}
     report = []
